@@ -37,7 +37,7 @@ let read_whole_file (file_path: string): string =
   s
 
 let section_name: string Parcoom.parser =
-  prefix "[" *> parse_while (fun x -> x != ']') <* prefix "]"
+  prefix "[" *> parse_while (fun x -> x != ']') <* any_char
 
 let is_space (x: char) = x == ' ' || x == '\n'
 

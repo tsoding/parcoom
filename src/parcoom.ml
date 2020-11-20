@@ -135,3 +135,13 @@ let many (p: 'a parser): 'a list parser =
           let input' = loop input in
           Ok (input', !result |> List.rev)
   }
+
+let any_char: char parser =
+  { run = fun input ->
+          let n = String.length input.text in
+          try
+            Ok (input_sub 1 (n - 1) input, String.get input.text 0)
+          with
+            Invalid_argument _ -> Error { pos = input.pos;
+                                          desc = "expected any character"; }
+  }
