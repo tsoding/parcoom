@@ -18,3 +18,9 @@ type 'a parser =
 let fail (e: error) = { run = fun _ -> Error e }
 let wrap (x: 'a) = { run = fun input -> Ok (input, x) }
 
+let map (f: 'a -> 'b) (p: 'a parser): 'b parser =
+  { run = fun input ->
+          match p.run input with
+          | Ok (input', x) -> Ok (input', f x)
+          | Error error -> Error error
+  }
