@@ -1,36 +1,12 @@
-type key = string
-type value = string
-type pair = key * value
-type section =
+open Parcoom
+
+type key_t = string
+type value_t = string
+type pair_t = key_t * value_t
+type section_t =
   { name: string;
-    pairs: pair list;
+    pairs: pair_t list;
   }
-
-let show_pair ((key, value): pair): string =
-  Printf.sprintf "(%s, %s)" key value
-
-let show_pairs (pairs: pair list): string =
-  pairs
-  |> List.map show_pair
-  |> String.concat ","
-  |> Printf.sprintf "[%s]"
-
-let show_section (sec: section): string =
-  Printf.sprintf "{ name = %s; pairs = %s }"
-    sec.name
-    (show_pairs sec.pairs)
-
-let show_sections (sections: section list): string =
-  sections
-  |> List.map show_section
-  |> String.concat ","
-  |> Printf.sprintf "[%s]"
-
-let ini: section list Parcoom.parser =
-  Parcoom.fail
-    { desc = "Not implemented yet";
-      pos = 0;
-    }
 
 let read_whole_file (file_path: string): string =
   let ch = open_in file_path in
@@ -39,17 +15,21 @@ let read_whole_file (file_path: string): string =
   close_in ch;
   s
 
-let () =
-  let result = "./test.ini"
-               |> read_whole_file
-               |> Parcoom.make_input
-               |> ini.run
-  in
-  match result with
-  | Ok (_, sections) -> sections
-                        |> show_sections
-                        |> print_endline
-  | Error error -> Printf.printf
-                     "Error happend at %d: %s\n"
-                     error.pos
-                     error.desc
+let section_name: string Parcoom.parser =
+  prefix "[" *> parse_while (fun x -> x != ']') <* prefix "]"
+
+let is_space (x: char) = x == ' ' || x == '\n'
+
+let wss: string Parcoom.parser =
+  parse_while is_space
+
+let pair: pair_t Parcoom.parser =
+  let name = parse_while (fun x -> not (is_space x) && x != '=') in
+  (wss *> name <* wss <* prefix "=" <* wss) <*> (name <* wss)
+
+let section: section_t Parcoom.parser =
+  section_name <*> many pair
+  |> map (fun (name, pairs) -> { name = name; pairs = pairs; })
+
+let ini: section_t list Parcoom.parser =
+  many section
