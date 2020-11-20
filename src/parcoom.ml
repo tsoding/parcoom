@@ -113,3 +113,10 @@ let ( <|> ) (p1: 'a parser) (p2: 'a parser): 'a parser =
                     })
 
   }
+
+let optional (p: 'a parser): 'a option parser =
+  { run = fun input ->
+          match p.run input with
+          | Ok (input', x) -> Ok (input', Some x)
+          | Error _        -> Ok (input, None)
+  }
