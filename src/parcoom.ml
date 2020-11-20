@@ -56,3 +56,33 @@ let prefix (prefix_str: string): string parser =
           with
             Invalid_argument _ -> Error unexpected_prefix_error
   }
+
+let ( *> ) (p1: 'a parser) (p2: 'b parser): 'b parser =
+  { run = fun input ->
+          input
+          |> p1.run
+          |> Result.map (fun (input', _) -> p2.run input')
+          |> Result.join
+  }
+
+let ( <* ) (p1: 'a parser) (p2: 'b parser): 'a parser =
+  { run = fun input ->
+          input
+          |> p1.run
+          |> Result.map (fun (input', x) ->
+                 input'
+                 |> p2.run
+                 |> Result.map (fun (input, _) -> (input, x)))
+          |> Result.join
+  }
+
+let ( <*> ) (p1: 'a parser) (p2: 'b parser): ('a * 'b) parser =
+  { run = fun input ->
+          input
+          |> p1.run
+          |> Result.map (fun (input', x) ->
+               input'
+               |> p2.run
+               |> Result.map (fun (input, y) -> (input, (x, y))))
+          |> Result.join
+  }
