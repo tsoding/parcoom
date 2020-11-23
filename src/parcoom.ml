@@ -16,25 +16,27 @@ type error =
     pos: int
   }
 
+let map_pair f (a, b) = (a, f b)
+
 type 'a parser =
-  { run : input -> (input * 'a, error) result
+  { run : input -> input * ('a, string) result
   }
 
-let fail (e: error) = { run = fun _ -> Error e }
-let wrap (x: 'a) = { run = fun input -> Ok (input, x) }
+let fail (e: string) = { run = fun input -> input, Error e }
+let wrap (x: 'a) = { run = fun input -> input, Ok x }
 
 let map (f: 'a -> 'b) (p: 'a parser): 'b parser =
   { run = fun input ->
           match p.run input with
-          | Ok (input', x) -> Ok (input', f x)
-          | Error error -> Error error
+          | input', Ok x        -> input', Ok (f x)
+          | input', Error error -> input', Error error
   }
 
 let bind (f: 'a -> 'b parser) (p: 'a parser): 'b parser =
   { run = fun input ->
           match p.run input with
-          | Ok (input', x) -> (f x).run input'
-          | Error error -> Error error
+          | input', Ok x -> (f x).run input'
+          | input', Error error -> input', Error error
   }
 
 let parse_while (p: char -> bool): string parser =
@@ -44,15 +46,13 @@ let parse_while (p: char -> bool): string parser =
           while !i < n && (String.get input.text !i |> p) do
             incr i
           done;
-          Ok (input_sub !i (n - !i) input, String.sub input.text 0 !i)
+          input_sub !i (n - !i) input, Ok (String.sub input.text 0 !i)
   }
 
 let prefix (prefix_str: string): string parser =
   { run = fun input ->
           let unexpected_prefix_error =
-            { pos = input.pos;
-              desc = Printf.sprintf "expected `%s`" prefix_str
-            }
+            Printf.sprintf "expected `%s`" prefix_str
           in
           try
             let prefix_size = String.length prefix_str in
@@ -60,88 +60,87 @@ let prefix (prefix_str: string): string parser =
             let prefix_input = input |> input_sub 0 prefix_size in
             if String.equal prefix_input.text prefix_str then
               let rest = input |> input_sub prefix_size (input_size - prefix_size) in
-              Ok (rest, prefix_str)
+              rest, Ok prefix_str
             else
-              Error unexpected_prefix_error
+              input, Error unexpected_prefix_error
           with
-            Invalid_argument _ -> Error unexpected_prefix_error
+            Invalid_argument _ -> input, Error unexpected_prefix_error
   }
 
 let ( *> ) (p1: 'a parser) (p2: 'b parser): 'b parser =
   { run = fun input ->
-          input
-          |> p1.run
-          |> Result.map (fun (input', _) -> p2.run input')
-          |> Result.join
+          let input', result = p1.run input in
+          match result  with
+          | Ok _  -> p2.run input'
+          | Error e -> input', Error e
   }
 
 let ( <* ) (p1: 'a parser) (p2: 'b parser): 'a parser =
   { run = fun input ->
-          input
-          |> p1.run
-          |> Result.map (fun (input', x) ->
-                 input'
-                 |> p2.run
-                 |> Result.map (fun (input, _) -> (input, x)))
-          |> Result.join
+          let input', result = p1.run input in
+          match result with
+          | Ok x ->
+             let input'', result' = p2.run input' in
+             (match result' with
+              | Ok _  -> input'', Ok x
+              | Error e -> input'', Error e)
+          | Error e -> input', Error e
   }
 
 let ( <*> ) (p1: 'a parser) (p2: 'b parser): ('a * 'b) parser =
   { run = fun input ->
-          input
-          |> p1.run
-          |> Result.map (fun (input', x) ->
-               input'
-               |> p2.run
-               |> Result.map (fun (input, y) -> (input, (x, y))))
-          |> Result.join
+          let input', result = p1.run input in
+          match result with
+          | Ok x ->
+             let input'', result' = p2.run input' in
+             (match result' with
+              | Ok y  -> input'', Ok (x, y)
+              | Error e -> input'', Error e)
+          | Error e -> input', Error e
   }
 
 let ( <|> ) (p1: 'a parser) (p2: 'a parser): 'a parser =
   { run = fun input ->
-          match p1.run input with
-          | Ok (input', x) -> Ok (input', x)
-          | Error left_error ->
-             input
-             |> p2.run
-             |> Result.map_error (fun right_error ->
-                    { pos = left_error.pos;
-                      desc = Printf.sprintf
-                               "%s or %s"
-                               left_error.desc
-                               right_error.desc;
-                    })
-
+          let input', result = p1.run input in
+          match result with
+          | Ok x -> input', Ok x
+          | Error left_error -> p2.run input
   }
 
 let optional (p: 'a parser): 'a option parser =
   { run = fun input ->
-          match p.run input with
-          | Ok (input', x) -> Ok (input', Some x)
-          | Error _        -> Ok (input, None)
+          let input', result = p.run input in
+          match result with
+          | Ok x    -> input', Ok (Some x)
+          | Error _ -> input', Ok None
   }
 
 let many (p: 'a parser): 'a list parser =
   { run = fun input ->
-          let result = ref [] in
+          let xs = ref [] in
           let rec loop input =
-            match p.run input with
-            | Ok (input', x) ->
-               result := x :: !result;
+            let input', result = p.run input in
+            match result with
+            | Ok x ->
+               xs := x :: !xs;
                loop input'
             | Error _ ->
                input
           in
           let input' = loop input in
-          Ok (input', !result |> List.rev)
+          input', Ok (!xs |> List.rev)
   }
 
 let any_char: char parser =
   { run = fun input ->
           let n = String.length input.text in
           try
-            Ok (input_sub 1 (n - 1) input, String.get input.text 0)
+            input_sub 1 (n - 1) input, Ok (String.get input.text 0)
           with
-            Invalid_argument _ -> Error { pos = input.pos;
-                                          desc = "expected any character"; }
+            Invalid_argument _ -> input, Error "expected any character"
   }
+
+let run (p: 'a parser) (s: string): ('a, error) result =
+  match s |> make_input |> p.run with
+  | _     , Ok x    -> Ok x
+  | input', Error desc -> Error {pos = input'.pos; desc = desc; }

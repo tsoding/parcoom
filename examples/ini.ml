@@ -60,11 +60,10 @@ let () =
   | _ :: file_path :: _ ->
      let result = file_path
                   |> read_whole_file
-                  |> make_input
-                  |> ini.run
+                  |> Parcoom.run ini
      in
      (match result with
-      | Ok (_, sections) -> sections |> show_sections |> print_endline
+      | Ok sections -> sections |> show_sections |> print_endline
       | Error error -> Printf.printf
                          "Error during parsing at position %d: %s"
                          error.pos
