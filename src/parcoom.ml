@@ -16,8 +16,6 @@ type error =
     pos: int
   }
 
-let map_pair f (a, b) = (a, f b)
-
 type 'a parser =
   { run : input -> input * ('a, string) result
   }
@@ -113,6 +111,19 @@ let optional (p: 'a parser): 'a option parser =
           match result with
           | Ok x    -> input', Ok (Some x)
           | Error _ -> input', Ok None
+  }
+
+let many_exact (n: int) (p: 'a parser): 'a list parser =
+  { run = fun input ->
+          let rec loop i xs input' =
+            if i < n then
+              let input'', result = p.run input' in
+              match result with
+              | Ok x    -> loop (i + 1) (x :: xs) input''
+              | Error e -> input'', Error e
+            else
+              input', Ok (List.rev xs)
+          in loop 0 [] input
   }
 
 let many (p: 'a parser): 'a list parser =
