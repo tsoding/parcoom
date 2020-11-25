@@ -7,6 +7,7 @@ Super Fast and Lightweight Monadic Parser Combinator library in OCaml. No depend
 ```
 $ make
 $ ./ini.native ./examples/test.ini
+$ make test
 ```
 
 ## References
