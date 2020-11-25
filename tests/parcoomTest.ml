@@ -26,7 +26,10 @@ let test_map () =
     assert (compare expected actual == 0)
   in
   let error_map () =
-    ()
+    let message = "khello" in
+    let expected = Error {desc = message; pos = 0} in
+    let actual = run (message |> fail |> map (fun x -> x + 1)) input in
+    assert (compare expected actual == 0)
   in
   ok_map ();
   error_map ()
